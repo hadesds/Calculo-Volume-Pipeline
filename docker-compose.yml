@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  # Motor de fotogrametria (a parte pesada: SfM + reconstrução densa).
+  nodeodm:
+    image: opendronemap/nodeodm
+    ports:
+      - "3000:3000"
+    volumes:
+      - dados_nodeodm:/var/www/data
+    restart: unless-stopped
+
+  # Nossa API: recebe fotos ou .tif, conversa com o nodeodm quando
+  # necessário, e calcula o volume.
+  api:
+    build: ./api
+    ports:
+      - "5000:5000"
+    environment:
+      - NODEODM_URL=http://nodeodm:3000
+    volumes:
+      - dados_api:/dados
+    depends_on:
+      - nodeodm
+    restart: unless-stopped
+
+  # Interface web (upload de fotos/.tif + dashboard) -- só arquivos
+  # estáticos, servidos por um nginx simples.
+  interface:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./interface:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  dados_nodeodm:
+  dados_api:

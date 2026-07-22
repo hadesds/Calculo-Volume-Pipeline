@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Upload — Painel Volumétrico</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#16181C; --surface:#1F2227; --surface-2:#262A31; --line:#33383F;
+    --amber:#E3A008; --sky:#4E8FA8; --text:#EDEAE2; --text-dim:#8C8E92;
+  }
+  *{box-sizing:border-box}
+  body{ margin:0; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding:32px 20px; }
+  .wrap{ max-width:760px; margin:0 auto; }
+  .eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; color:var(--amber); text-transform:uppercase; margin:0 0 4px; }
+  h1{ font-family:'Barlow Condensed',sans-serif; font-size:30px; font-weight:700; margin:0 0 26px; }
+  .tabs{ display:flex; gap:6px; margin-bottom:20px; }
+  .tabs button{
+    flex:1; padding:12px; border-radius:8px; border:1px solid var(--line); background:var(--surface);
+    color:var(--text-dim); cursor:pointer; font-family:'IBM Plex Mono',monospace; font-size:13px;
+  }
+  .tabs button.ativo{ background:var(--surface-2); color:var(--amber); border-color:var(--amber); }
+  .painel{ background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:24px; display:none; }
+  .painel.ativo{ display:block; }
+  .drop{
+    border:1.5px dashed var(--line); border-radius:10px; padding:28px; text-align:center;
+    color:var(--text-dim); font-size:14px; cursor:pointer; margin-bottom:16px; transition:border-color .15s;
+  }
+  .drop:hover, .drop.hover{ border-color:var(--amber); color:var(--text); }
+  .drop input{ display:none; }
+  .campo{ margin-bottom:14px; }
+  .campo label{ display:block; font-size:12px; color:var(--text-dim); margin-bottom:6px; font-family:'IBM Plex Mono',monospace; }
+  .campo input[type="number"]{
+    width:100%; background:var(--surface-2); border:1px solid var(--line); border-radius:7px;
+    color:var(--text); padding:9px 10px; font-family:'IBM Plex Mono',monospace; font-size:14px;
+  }
+  .campo input[type="url"]{
+    width:100%; background:var(--surface-2); border:1px solid var(--line); border-radius:7px;
+    color:var(--text); padding:9px 10px; font-family:'IBM Plex Mono',monospace; font-size:13px;
+  }
+  button.enviar{
+    background:var(--amber); color:#16181C; border:none; padding:11px 20px; border-radius:8px;
+    font-weight:600; cursor:pointer; font-family:'Inter',sans-serif; font-size:14px;
+  }
+  button.enviar:disabled{ opacity:.5; cursor:default; }
+  .arquivos-lista{ font-size:12px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; margin-bottom:14px; }
+  .resultado{ margin-top:20px; padding:18px; border-radius:10px; background:var(--surface-2); display:none; }
+  .resultado.mostrar{ display:block; }
+  .resultado .linha{ display:flex; justify-content:space-between; padding:6px 0; font-size:14px; border-bottom:1px solid var(--line); }
+  .resultado .linha:last-child{ border-bottom:none; }
+  .resultado .linha .v{ font-family:'IBM Plex Mono',monospace; color:var(--amber); }
+  .erro{ color:#D9634B; font-size:13px; margin-top:12px; font-family:'IBM Plex Mono',monospace; }
+  .status{ font-size:13px; color:var(--text-dim); margin-top:12px; font-family:'IBM Plex Mono',monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="eyebrow">painel volumétrico</p>
+  <h1>Enviar dados para cálculo</h1>
+
+  <div class="tabs">
+    <button class="ativo" data-tab="fotos" onclick="trocarAba('fotos')">fotos → fotogrametria</button>
+    <button data-tab="doistif" onclick="trocarAba('doistif')">2 DEMs (.tif) — preciso</button>
+    <button data-tab="umtif" onclick="trocarAba('umtif')">1 DEM (.tif) — aproximado</button>
+  </div>
+
+  <div class="campo">
+    <label>endereço da API</label>
+    <input type="url" id="api-url" value="http://localhost:5000">
+  </div>
+
+  <!-- ABA 1: fotos -->
+  <div class="painel ativo" id="painel-fotos">
+    <div class="drop" onclick="document.getElementById('input-fotos').click()">
+      arraste as fotos aqui ou clique para selecionar (mín. 5, com sobreposição)
+      <input type="file" id="input-fotos" multiple accept="image/*">
+    </div>
+    <div class="arquivos-lista" id="lista-fotos"></div>
+    <div class="campo">
+      <label>densidade do material (kg/m³)</label>
+      <input type="number" id="densidade-fotos" value="900">
+    </div>
+    <button class="enviar" onclick="enviarFotos()">processar fotos (via NodeODM)</button>
+  </div>
+
+  <!-- ABA 2: dois tifs -->
+  <div class="painel" id="painel-doistif">
+    <div class="drop" onclick="document.getElementById('input-baseline').click()">
+      DEM baseline (área vazia)
+      <input type="file" id="input-baseline" accept=".tif,.tiff">
+    </div>
+    <div class="arquivos-lista" id="lista-baseline"></div>
+    <div class="drop" onclick="document.getElementById('input-carregado').click()">
+      DEM carregado (com a pilha)
+      <input type="file" id="input-carregado" accept=".tif,.tiff">
+    </div>
+    <div class="arquivos-lista" id="lista-carregado"></div>
+    <div class="campo">
+      <label>densidade do material (kg/m³)</label>
+      <input type="number" id="densidade-doistif" value="900">
+    </div>
+    <button class="enviar" onclick="enviarDoisTifs()">calcular volume</button>
+  </div>
+
+  <!-- ABA 3: um tif -->
+  <div class="painel" id="painel-umtif">
+    <div class="drop" onclick="document.getElementById('input-umtif').click()">
+      DEM/DSM único (.tif) — usa o percentil mais baixo como nível do chão
+      <input type="file" id="input-umtif" accept=".tif,.tiff">
+    </div>
+    <div class="arquivos-lista" id="lista-umtif"></div>
+    <div class="campo">
+      <label>densidade do material (kg/m³)</label>
+      <input type="number" id="densidade-umtif" value="900">
+    </div>
+    <button class="enviar" onclick="enviarUmTif()">calcular volume (aproximado)</button>
+  </div>
+
+  <div class="status" id="status"></div>
+  <div class="erro" id="erro"></div>
+  <div class="resultado" id="resultado">
+    <div class="linha"><span>volume</span><span class="v" id="r-volume">—</span></div>
+    <div class="linha"><span>massa</span><span class="v" id="r-massa">—</span></div>
+    <div class="linha"><span>GSD (resolução)</span><span class="v" id="r-gsd">—</span></div>
+    <div class="linha"><span>método</span><span class="v" id="r-metodo">—</span></div>
+  </div>
+</div>
+
+<script>
+function trocarAba(nome) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('ativo', b.dataset.tab === nome));
+  document.querySelectorAll('.painel').forEach(p => p.classList.remove('ativo'));
+  document.getElementById('painel-' + nome).classList.add('ativo');
+  esconderResultado();
+}
+
+document.getElementById('input-fotos').addEventListener('change', (e) => {
+  document.getElementById('lista-fotos').textContent = e.target.files.length + ' foto(s) selecionada(s)';
+});
+document.getElementById('input-baseline').addEventListener('change', (e) => {
+  document.getElementById('lista-baseline').textContent = e.target.files[0]?.name || '';
+});
+document.getElementById('input-carregado').addEventListener('change', (e) => {
+  document.getElementById('lista-carregado').textContent = e.target.files[0]?.name || '';
+});
+document.getElementById('input-umtif').addEventListener('change', (e) => {
+  document.getElementById('lista-umtif').textContent = e.target.files[0]?.name || '';
+});
+
+function apiUrl() {
+  return document.getElementById('api-url').value.replace(/\/$/, '');
+}
+
+function mostrarStatus(msg) {
+  document.getElementById('status').textContent = msg;
+  document.getElementById('erro').textContent = '';
+}
+
+function mostrarErro(msg) {
+  document.getElementById('erro').textContent = msg;
+  document.getElementById('status').textContent = '';
+}
+
+function esconderResultado() {
+  document.getElementById('resultado').classList.remove('mostrar');
+}
+
+function mostrarResultado(dado) {
+  document.getElementById('r-volume').textContent = dado.volume_m3 + ' m³';
+  document.getElementById('r-massa').textContent = dado.massa_kg + ' kg';
+  document.getElementById('r-gsd').textContent = (dado.gsd_m ?? '—') + ' m/px';
+  document.getElementById('r-metodo').textContent = dado.metodo || '—';
+  document.getElementById('resultado').classList.add('mostrar');
+  document.getElementById('status').textContent = '';
+  document.getElementById('erro').textContent = '';
+}
+
+async function enviarFotos() {
+  const arquivos = document.getElementById('input-fotos').files;
+  if (arquivos.length < 5) return mostrarErro('selecione ao menos 5 fotos com sobreposição');
+
+  const form = new FormData();
+  for (const f of arquivos) form.append('fotos', f);
+  form.append('densidade', document.getElementById('densidade-fotos').value);
+
+  mostrarStatus('enviando fotos e aguardando processamento fotogramétrico (pode levar minutos)...');
+  esconderResultado();
+  try {
+    const resp = await fetch(apiUrl() + '/volume/de-fotos', { method: 'POST', body: form });
+    const dado = await resp.json();
+    if (!resp.ok) return mostrarErro(dado.erro || 'falha no processamento');
+    mostrarResultado(dado);
+  } catch (e) {
+    mostrarErro('não consegui falar com a API: ' + e.message);
+  }
+}
+
+async function enviarDoisTifs() {
+  const baseline = document.getElementById('input-baseline').files[0];
+  const carregado = document.getElementById('input-carregado').files[0];
+  if (!baseline || !carregado) return mostrarErro('selecione os dois arquivos: baseline e carregado');
+
+  const form = new FormData();
+  form.append('baseline', baseline);
+  form.append('carregado', carregado);
+  form.append('densidade', document.getElementById('densidade-doistif').value);
+
+  mostrarStatus('calculando...');
+  esconderResultado();
+  try {
+    const resp = await fetch(apiUrl() + '/volume/dois-tifs', { method: 'POST', body: form });
+    const dado = await resp.json();
+    if (!resp.ok) return mostrarErro(dado.erro || 'falha no cálculo');
+    mostrarResultado(dado);
+  } catch (e) {
+    mostrarErro('não consegui falar com a API: ' + e.message);
+  }
+}
+
+async function enviarUmTif() {
+  const arquivo = document.getElementById('input-umtif').files[0];
+  if (!arquivo) return mostrarErro('selecione um arquivo .tif');
+
+  const form = new FormData();
+  form.append('tif', arquivo);
+  form.append('densidade', document.getElementById('densidade-umtif').value);
+
+  mostrarStatus('calculando...');
+  esconderResultado();
+  try {
+    const resp = await fetch(apiUrl() + '/volume/de-tif', { method: 'POST', body: form });
+    const dado = await resp.json();
+    if (!resp.ok) return mostrarErro(dado.erro || 'falha no cálculo');
+    mostrarResultado(dado);
+  } catch (e) {
+    mostrarErro('não consegui falar com a API: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>
