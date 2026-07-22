@@ -3,17 +3,28 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Upload — Painel Volumétrico</title>
+<title>Duna — Painel Volumétrico</title>
+<link rel="icon" href="img/logo_duna.png" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <style>
   :root{
     --bg:#16181C; --surface:#1F2227; --surface-2:#262A31; --line:#33383F;
     --amber:#E3A008; --sky:#4E8FA8; --text:#EDEAE2; --text-dim:#8C8E92;
   }
   *{box-sizing:border-box}
-  body{ margin:0; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding:32px 20px; }
-  .wrap{ max-width:760px; margin:0 auto; }
+  body{ margin:0; background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; padding:0 0 32px; }
+  .wrap{ max-width:760px; margin:0 auto; padding:0 20px; }
+
+  .marca{
+    display:flex; align-items:center; gap:12px; padding:20px 20px;
+    border-bottom:2px solid var(--amber); background:#0F1013; margin-bottom:28px;
+  }
+  .marca img{ height:3rem; width:5rem; object-fit:contain; border-radius:6px; }
+  .marca .nome{ font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:24px; letter-spacing:0.03em; color:var(--text); line-height:1; }
+  .marca .nome span{ color:var(--amber); }
+  .marca .subtitulo{ font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.12em; color:var(--text-dim); text-transform:uppercase; margin-top:3px; }
   .eyebrow{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.14em; color:var(--amber); text-transform:uppercase; margin:0 0 4px; }
   h1{ font-family:'Barlow Condensed',sans-serif; font-size:30px; font-weight:700; margin:0 0 26px; }
   .tabs{ display:flex; gap:6px; margin-bottom:20px; }
@@ -53,11 +64,25 @@
   .resultado .linha .v{ font-family:'IBM Plex Mono',monospace; color:var(--amber); }
   .erro{ color:#D9634B; font-size:13px; margin-top:12px; font-family:'IBM Plex Mono',monospace; }
   .status{ font-size:13px; color:var(--text-dim); margin-top:12px; font-family:'IBM Plex Mono',monospace; }
+  .pilha-3d{
+    display:none; margin-top:20px; background:var(--surface); border:1px solid var(--line);
+    border-radius:12px; padding:12px;
+  }
+  .pilha-3d.mostrar{ display:block; }
+  .pilha-3d .titulo{ font-size:12px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; margin-bottom:8px; }
+  #grafico-pilha{ width:100%; height:420px; }
 </style>
 </head>
 <body>
+<div class="marca">
+  <img src="img/logo_duna.png" alt="Duna" onerror="this.style.display='none'">
+  <div>
+    <div class="nome"><span>DUNA</span></div>
+    <div class="subtitulo">painel volumétrico</div>
+  </div>
+</div>
 <div class="wrap">
-  <p class="eyebrow">painel volumétrico</p>
+  <p class="eyebrow">fonte de dados</p>
   <h1>Enviar dados para cálculo</h1>
 
   <div class="tabs">
@@ -126,6 +151,11 @@
     <div class="linha"><span>GSD (resolução)</span><span class="v" id="r-gsd">—</span></div>
     <div class="linha"><span>método</span><span class="v" id="r-metodo">—</span></div>
   </div>
+
+  <div class="pilha-3d" id="pilha-3d">
+    <div class="titulo">pilha reconstruída — arraste para rotacionar, scroll para zoom</div>
+    <div id="grafico-pilha"></div>
+  </div>
 </div>
 
 <script>
@@ -165,6 +195,7 @@ function mostrarErro(msg) {
 
 function esconderResultado() {
   document.getElementById('resultado').classList.remove('mostrar');
+  document.getElementById('pilha-3d').classList.remove('mostrar');
 }
 
 function mostrarResultado(dado) {
@@ -175,6 +206,45 @@ function mostrarResultado(dado) {
   document.getElementById('resultado').classList.add('mostrar');
   document.getElementById('status').textContent = '';
   document.getElementById('erro').textContent = '';
+
+  if (dado.grade) {
+    desenharPilha3D(dado);
+  }
+}
+
+function desenharPilha3D(dado) {
+  const n_y = dado.grade.length;
+  const n_x = dado.grade[0].length;
+  const x = Array.from({length: n_x}, (_, i) => (i / (n_x - 1)) * dado.largura_m);
+  const y = Array.from({length: n_y}, (_, i) => (i / (n_y - 1)) * dado.comprimento_m);
+
+  const dados_plot = [{
+    type: 'surface',
+    z: dado.grade,
+    x: x,
+    y: y,
+    colorscale: [[0, '#262A31'], [0.5, '#B5502A'], [1, '#E3A008']],
+    colorbar: { title: 'altura (m)', tickfont: { color: '#8C8E92' } },
+    hovertemplate: 'X: %{x:.2f} m<br>Y: %{y:.2f} m<br>altura: %{z:.3f} m<extra></extra>',
+  }];
+
+  const layout = {
+    autosize: true,
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    font: { color: '#EDEAE2', family: 'IBM Plex Mono, monospace', size: 11 },
+    margin: { l: 0, r: 0, t: 10, b: 0 },
+    scene: {
+      xaxis: { title: 'largura (m)', gridcolor: '#33383F' },
+      yaxis: { title: 'comprimento (m)', gridcolor: '#33383F' },
+      zaxis: { title: 'altura (m)', gridcolor: '#33383F' },
+      aspectmode: 'manual',
+      aspectratio: { x: dado.largura_m, y: dado.comprimento_m, z: Math.max(0.4, dado.largura_m * 0.25) },
+    },
+  };
+
+  Plotly.newPlot('grafico-pilha', dados_plot, layout, { responsive: true, displaylogo: false });
+  document.getElementById('pilha-3d').classList.add('mostrar');
 }
 
 async function enviarFotos() {

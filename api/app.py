@@ -26,14 +26,52 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
+# Libera CORS: a interface (porta 8080) e a API (porta 5000) são
+# origens diferentes do ponto de vista do navegador, então sem isso o
+# fetch() é bloqueado com "NetworkError when attempting to fetch
+# resource" (Firefox) ou "Failed to fetch" (Chrome) mesmo com a API
+# rodando normalmente.
+@app.after_request
+def liberar_cors(resposta):
+    resposta.headers["Access-Control-Allow-Origin"] = "*"
+    resposta.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    resposta.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return resposta
+
+
+@app.route("/<path:qualquer>", methods=["OPTIONS"])
+def preflight(qualquer):
+    return "", 204
+
+
 NODEODM_URL = os.environ.get("NODEODM_URL", "http://nodeodm:3000")
 PASTA_DADOS = "/dados"
 DENSIDADE_PADRAO = 900  # kg/m3
 
 
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok"})
+RESOLUCAO_MAX_VISUALIZACAO = 80  # limita o payload JSON devolvido ao navegador
+
+
+def _grade_para_visualizacao(diferenca_m, gsd_x, gsd_y, max_resolucao=RESOLUCAO_MAX_VISUALIZACAO):
+    """
+    Reduz a grade de diferença de altura para no máximo NxN células,
+    pra poder mandar pro navegador via JSON sem pesar demais (um DEM
+    real facilmente tem milhões de pixels; a pilha visual não precisa
+    de mais que ~80x80 pra ficar reconhecível na tela).
+    """
+    from scipy.ndimage import zoom
+
+    altura, largura = diferenca_m.shape
+    fator_y = min(1.0, max_resolucao / altura)
+    fator_x = min(1.0, max_resolucao / largura)
+    reduzida = zoom(diferenca_m, (fator_y, fator_x), order=1) if (fator_y < 1 or fator_x < 1) else diferenca_m
+
+    n_y, n_x = reduzida.shape
+    return {
+        "grade": reduzida.round(4).tolist(),
+        "largura_m": round(largura * gsd_x, 3),
+        "comprimento_m": round(altura * gsd_y, 3),
+    }
 
 
 # ----------------------------------------------------------------------
@@ -151,13 +189,15 @@ def _volume_de_um_dem(caminho_tif, densidade):
     volume_m3 = float(np.sum(diferenca) * area_celula)
     massa_kg = volume_m3 * densidade
 
-    return {
+    resultado = {
         "volume_m3": round(volume_m3, 4),
         "massa_kg": round(massa_kg, 1),
         "gsd_m": round(gsd_x, 4),
         "nivel_base_m": round(nivel_base, 3),
         "metodo": "percentil-do-proprio-dem (aproximado)",
     }
+    resultado.update(_grade_para_visualizacao(diferenca, gsd_x, gsd_y))
+    return resultado
 
 
 # ----------------------------------------------------------------------
@@ -199,12 +239,14 @@ def volume_de_dois_tifs():
     volume_m3 = float(np.sum(diferenca) * area_celula)
     massa_kg = volume_m3 * densidade
 
-    return jsonify({
+    resultado = {
         "volume_m3": round(volume_m3, 4),
         "massa_kg": round(massa_kg, 1),
         "gsd_m": round(gsd_x, 4),
         "metodo": "diferenca-de-dois-dems (preciso)",
-    })
+    }
+    resultado.update(_grade_para_visualizacao(diferenca, gsd_x, gsd_y))
+    return jsonify(resultado)
 
 
 if __name__ == "__main__":
