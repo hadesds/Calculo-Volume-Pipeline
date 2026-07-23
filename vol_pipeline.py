@@ -202,20 +202,3 @@ if __name__ == "__main__":
     _, _, mapa_diferenca, volume, massa = rodar_demo(altura_simulada_m=0.35)
     visualizar_resultado(mapa_diferenca)
     visualizar_interativo(mapa_diferenca, volume, massa)
-
-# ----------------------------------------------------------------------
-# Observação sobre pyrealsense2:
-#
-# Na data de hoje, o pacote pyrealsense2 também costuma atrasar o
-# lançamento de wheels para versões novas do Python (mesmo padrão do
-# Open3D). Se pip install pyrealsense2 falhar no seu 3.13:
-#   1. verifique a página de releases do pacote no PyPI para confirmar
-#      se já existe wheel pra sua versão/plataforma;
-#   2. se não existir, a saída mais rápida pro hackathon é criar um
-#      ambiente virtual só para a captura com Python 3.11/3.12 (via
-#      pyenv ou conda), rodar a captura nele, e salvar a nuvem de pontos
-#      num arquivo (.npy ou .csv) que o resto do pipeline lê normalmente
-#      -- assim só o script de captura fica preso à versão antiga do
-#      Python, e o processamento (que é a parte pesada) roda livre no
-#      3.13.
-# ----------------------------------------------------------------------

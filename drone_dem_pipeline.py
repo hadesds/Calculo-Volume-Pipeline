@@ -1,42 +1,10 @@
-"""
-Protótipo: cálculo de volume via fotogrametria de drone (DEM).
-
-Visão de longo prazo do projeto: em vez da câmera de profundidade fixa
-acima do box, um drone sobrevoa a área e captura fotos aéreas com
-sobreposição. Um software de fotogrametria (Agisoft Metashape ou
-WebODM/NodeODM) processa essas fotos e gera:
-  - uma ortofoto (mosaico de imagem georreferenciado)
-  - um DEM -- Modelo Digital de Elevação -- que é, na prática, um
-    heightmap georreferenciado. Estruturalmente é o MESMO dado que já
-    usávamos vindo da câmera de profundidade.
-
-O cálculo de volume não muda: é o mesmo método de corte/aterro
-(diferença de altura x área da célula, somado) que qualquer ferramenta
-de volumetria em DEM usa por baixo (inclusive as calculadoras de
-"stockpile volume" do QGIS, Metashape e WebODM).
-
-Este arquivo prototipa 4 partes:
-  1. Planejamento de voo (trajeto em zigue-zague sobre o box)
-  2. Simulação do DEM que sairia do processamento fotogramétrico
-  3. Cálculo de volume por corte/aterro (idêntico ao pipeline da câmera)
-  4. Stub de integração real com a API do NodeODM/WebODM
-
-Requisitos p/ prototipagem (sem hardware real):
-    pip install numpy scipy plotly --break-system-packages
-Requisitos p/ integração real (quando tiver o drone/imagens):
-    pip install requests rasterio --break-system-packages
-    (rasterio depende de GDAL -- se a wheel não existir pra sua versão
-    de Python, use conda: conda install -c conda-forge rasterio)
-"""
-
 import numpy as np
 from dataclasses import dataclass
 from scipy.ndimage import median_filter
 
 
-# ----------------------------------------------------------------------
 # 1. PLANEJAMENTO DE VOO
-# ----------------------------------------------------------------------
+
 @dataclass
 class PlanoDeVoo:
     area_largura_m: float
@@ -90,9 +58,8 @@ class PlanoDeVoo:
         return n_linhas * fotos_por_linha
 
 
-# ----------------------------------------------------------------------
 # 2. SIMULAÇÃO DO DEM (substitui o processamento fotogramétrico real)
-# ----------------------------------------------------------------------
+
 def simular_dem(area_largura_m, area_comprimento_m, altura_pico_m, gsd_m,
                  ruido=0.012, semente=None):
     """
@@ -128,9 +95,8 @@ def simular_dem(area_largura_m, area_comprimento_m, altura_pico_m, gsd_m,
     return Z, x, y
 
 
-# ----------------------------------------------------------------------
-# 3. CÁLCULO DE VOLUME POR CORTE/ATERRO (idêntico ao pipeline da câmera)
-# ----------------------------------------------------------------------
+# 3. CÁLCULO DE VOLUME POR CORTE/ATERRO
+
 def calcular_volume_dem(dem_vazio, dem_carregado, gsd_m, densidade_kg_m3=900):
     diferenca = np.clip(dem_carregado - dem_vazio, 0, None)
     area_celula_m2 = gsd_m ** 2
@@ -139,24 +105,10 @@ def calcular_volume_dem(dem_vazio, dem_carregado, gsd_m, densidade_kg_m3=900):
     return volume_m3, massa_kg, diferenca
 
 
-# ----------------------------------------------------------------------
 # 4. INTEGRAÇÃO REAL: NodeODM / WebODM (stub -- requer servidor rodando)
-# ----------------------------------------------------------------------
+
 def processar_fotos_webodm(caminhos_fotos, url_node_odm="http://localhost:3000"):
-    """
-    Automação real do processamento fotogramétrico via API do NodeODM
-    (o motor de processamento por trás do WebODM).
-
-    Pré-requisito: um NodeODM rodando, por exemplo via Docker:
-        docker run -p 3000:3000 opendronemap/nodeodm
-
-    Fluxo (mesmo que a interface web do WebODM faz por baixo):
-      1. cria a task
-      2. envia cada foto
-      3. inicia o processamento (commit)
-      4. aguarda status COMPLETED (polling)
-      5. baixa o dem.tif gerado
-    """
+  
     import time
     import requests
 
@@ -187,13 +139,6 @@ def processar_fotos_webodm(caminhos_fotos, url_node_odm="http://localhost:3000")
 
 
 def ler_dem_tif(caminho_tif):
-    """
-    Lê um DEM real (.tif) exportado do WebODM ou do Metashape.
-    Requer rasterio (que por sua vez requer GDAL) -- se a wheel não
-    existir pra sua versão de Python, use um ambiente conda à parte
-    só pra essa leitura, e passe o array numpy resultante pro resto
-    do pipeline normalmente.
-    """
     import rasterio
 
     with rasterio.open(caminho_tif) as src:
@@ -204,9 +149,8 @@ def ler_dem_tif(caminho_tif):
     return dem, gsd_m
 
 
-# ----------------------------------------------------------------------
 # DEMO
-# ----------------------------------------------------------------------
+
 def rodar_demo_drone(area_largura_m=4.0, area_comprimento_m=3.0,
                       altitude_m=12.0, altura_pilha_m=0.6):
     plano = PlanoDeVoo(area_largura_m, area_comprimento_m, altitude_m=altitude_m)

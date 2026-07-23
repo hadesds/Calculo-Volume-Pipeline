@@ -1,21 +1,3 @@
-"""
-API de cálculo de volume — recebe fotos (processa via NodeODM) OU um
-arquivo .tif/DEM já pronto (Metashape, WebODM, QGIS, etc) e calcula o
-volume pelo método de corte/aterro, o mesmo já validado no protótipo
-com câmera de profundidade.
-
-Endpoints:
-  POST /volume/de-fotos    -> multipart, campo 'fotos' (múltiplas) + 'densidade'
-  POST /volume/de-tif      -> multipart, campo 'tif' (1 arquivo) + 'densidade'
-                               (usa o percentil mais baixo do próprio DEM como
-                               "nível do chão" -- aproximação. Ver observação
-                               no README sobre por que 'dois-tifs' é mais preciso)
-  POST /volume/dois-tifs   -> multipart, campos 'baseline' e 'carregado' + 'densidade'
-                               (o método mais preciso: dois DEMs, vazio vs cheio,
-                               igual ao pipeline da câmera de profundidade)
-  GET  /health
-"""
-
 import os
 import time
 
@@ -26,11 +8,7 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-# Libera CORS: a interface (porta 8080) e a API (porta 5000) são
-# origens diferentes do ponto de vista do navegador, então sem isso o
-# fetch() é bloqueado com "NetworkError when attempting to fetch
-# resource" (Firefox) ou "Failed to fetch" (Chrome) mesmo com a API
-# rodando normalmente.
+
 @app.after_request
 def liberar_cors(resposta):
     resposta.headers["Access-Control-Allow-Origin"] = "*"
@@ -49,16 +27,10 @@ PASTA_DADOS = "/dados"
 DENSIDADE_PADRAO = 900  # kg/m3
 
 
-RESOLUCAO_MAX_VISUALIZACAO = 80  # limita o payload JSON devolvido ao navegador
+RESOLUCAO_MAX_VISUALIZACAO = 80 
 
 
 def _grade_para_visualizacao(diferenca_m, gsd_x, gsd_y, max_resolucao=RESOLUCAO_MAX_VISUALIZACAO):
-    """
-    Reduz a grade de diferença de altura para no máximo NxN células,
-    pra poder mandar pro navegador via JSON sem pesar demais (um DEM
-    real facilmente tem milhões de pixels; a pilha visual não precisa
-    de mais que ~80x80 pra ficar reconhecível na tela).
-    """
     from scipy.ndimage import zoom
 
     altura, largura = diferenca_m.shape
@@ -74,9 +46,9 @@ def _grade_para_visualizacao(diferenca_m, gsd_x, gsd_y, max_resolucao=RESOLUCAO_
     }
 
 
-# ----------------------------------------------------------------------
+
 # CAMINHO 1: fotos brutas -> NodeODM processa -> DEM -> volume
-# ----------------------------------------------------------------------
+
 @app.route("/volume/de-fotos", methods=["POST"])
 def volume_de_fotos():
     fotos = request.files.getlist("fotos")
@@ -120,8 +92,7 @@ def _processar_no_nodeodm(caminhos_fotos, pasta_saida):
 
     requests.post(f"{NODEODM_URL}/task/new/commit/{uuid}")
 
-    # polling -- fotogrametria de verdade leva de minutos a horas
-    # dependendo do nº de fotos e da resolução escolhida
+    
     while True:
         info = requests.get(f"{NODEODM_URL}/task/{uuid}/info").json()
         codigo = info["status"]["code"]
@@ -139,20 +110,11 @@ def _processar_no_nodeodm(caminhos_fotos, pasta_saida):
     return caminho_dem
 
 
-# ----------------------------------------------------------------------
+
 # CAMINHO 2: .tif já processado (Metashape, WebODM, QGIS...) -> volume
-# ----------------------------------------------------------------------
+
 @app.route("/volume/de-tif", methods=["POST"])
 def volume_de_tif():
-    """
-    Aceita um único DEM/DSM .tif e estima o volume acima do 'chão',
-    aproximado como o percentil 2 das cotas do próprio arquivo.
-
-    Limitação: essa aproximação assume que a maior parte da área
-    escaneada é chão vazio ao redor da pilha. Se o .tif cobrir só a
-    pilha (sem margem de chão visível), use /volume/dois-tifs, que
-    é o método correto e mais preciso.
-    """
     arquivo = request.files.get("tif")
     densidade = float(request.form.get("densidade", DENSIDADE_PADRAO))
     if not arquivo:
@@ -200,9 +162,8 @@ def _volume_de_um_dem(caminho_tif, densidade):
     return resultado
 
 
-# ----------------------------------------------------------------------
 # CAMINHO 3 (mais preciso): dois DEMs -- baseline vazio + carregado
-# ----------------------------------------------------------------------
+
 @app.route("/volume/dois-tifs", methods=["POST"])
 def volume_de_dois_tifs():
     baseline = request.files.get("baseline")
